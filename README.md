@@ -15,8 +15,8 @@ python loh_merge.py --noheader --min_len 1000 --min_prop 0.1 < loh.tsv > loh.mer
 
 ## Method
 
-normal -> ref     het    hom
-tumour v
-ref       neutral accept support
-het       reject  reject reject
-hom       support accept neutral
+|tumour &downarrow; normal &rightarrow;| ref | het | hom |
+|-|-|-|-|
+|ref |      neutral | accept | support |
+|het |      reject  | reject | reject |
+|hom |      support | accept | neutral |
