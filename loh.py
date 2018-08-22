@@ -12,12 +12,14 @@ import sys
 PASSED='+'
 FILTERED=''
 
+# het in the germline
 MIN_AF_HET_GL=0.3
 MAX_AF_HET_GL=0.7
 
-MIN_HET_HOM_DIFF=0.3
-MIN_HOM_REF_DIFF=0.6
+MIN_HET_HOM_DIFF=0.3 # het -> hom diff required (accept)
+MIN_HOM_REF_DIFF=0.6 # hom -> hom diff required (support)
 
+# het in the tumour
 MIN_AF_HET_TUMOUR=0.3
 MAX_AF_HET_TUMOUR=0.7
 
@@ -50,7 +52,7 @@ def write(stats, variant, germline_af, tumour_af, germline_dp, tumour_dp, cat):
   sys.stdout.write('{}\t{}\t{:.2f}\t{:.2f}\t{}\t{}\t{}{}\n'.format(variant.CHROM, variant.POS, germline_af, tumour_af, germline_dp, tumour_dp, cat, pass_marker))
   stats[cat] += 1
 
-def main(tumour, germline, neutral_variants, filtered_variants, min_dp_germline, min_dp_tumour):
+def main(tumour, germline, neutral_variants, filtered_variants, min_dp_germline, min_dp_tumour, min_af):
   logging.info('reading vcf from stdin...')
   vcf_in = cyvcf2.VCF('-')
   skipped_pass = count = 0
@@ -58,7 +60,7 @@ def main(tumour, germline, neutral_variants, filtered_variants, min_dp_germline,
   tumour_id = vcf_in.samples.index(tumour)
   germline_id = vcf_in.samples.index(germline)
 
-  stats = {'af_g_min': 1.0, 'af_g_max': 0.0, 'af_t_min': 1.0, 'af_t_max': 0.0, 'accept': 0, 'support': 0, 'reject': 0, 'accept': 0, 'neutral': 0, 'min_dp': 0}
+  stats = {'af_g_min': 1.0, 'af_g_max': 0.0, 'af_t_min': 1.0, 'af_t_max': 0.0, 'accept': 0, 'support': 0, 'reject': 0, 'accept': 0, 'neutral': 0, 'min_dp': 0, 'min_af': 0}
 
   sys.stdout.write('chrom\tpos\tg_af\tt_af\tg_dp\tt_af\tstatus\n')
 
@@ -92,6 +94,10 @@ def main(tumour, germline, neutral_variants, filtered_variants, min_dp_germline,
     else:
       tumour_af = tumour_ad_alt / (tumour_ad_ref + tumour_ad_alt)
 
+    if germline_af < min_af and tumour_af < min_af:
+      stats['min_af'] += 1
+      continue
+
     stats['af_t_min'] = min(stats['af_t_min'], tumour_af)
     stats['af_t_max'] = max(stats['af_t_max'], tumour_af)
 
@@ -122,6 +128,7 @@ if __name__ == '__main__':
   parser.add_argument('--filtered_variants', action="store_true", help='include filtered variants')
   parser.add_argument('--min_dp_germline', type=int, default=1, help='min dp for germline')
   parser.add_argument('--min_dp_tumour', type=int, default=1, help='min dp for tumour')
+  parser.add_argument('--min_af', type=float, default=0.0, help='min af for either germline or tumour')
   parser.add_argument('--verbose', action='store_true', help='more logging')
   args = parser.parse_args()
   if args.verbose:
@@ -129,4 +136,4 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.tumour, args.germline, args.neutral_variants, args.filtered_variants, args.min_dp_germline, args.min_dp_tumour)
+  main(args.tumour, args.germline, args.neutral_variants, args.filtered_variants, args.min_dp_germline, args.min_dp_tumour, args.min_af)
