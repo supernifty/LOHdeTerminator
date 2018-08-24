@@ -30,20 +30,48 @@ def write_merged(start, last, loh_status, stats, min_len, min_prop, bafs):
       return True
   return False
 
-def plot_bafs(filename, bafs):
+def plot_bafs(filename, bafs, title, start, finish, gene_starts, gene_finishes, gene_names):
   if len(bafs['x']) > 0:
     plt.figure(figsize=(24, 8))
-    plt.scatter(bafs['x'], bafs['y'], c=bafs['c'], alpha=0.5)
+    if start is None:
+      plt.scatter(bafs['x'], bafs['y'], c=bafs['c'], alpha=0.5)
+      start = 0
+      finish = max(bafs['x'])
+    else:
+      xycs = [xyc for xyc in zip(bafs['x'], bafs['y'], bafs['c']) if start <= xyc[0] <= finish]
+      plt.scatter([xyc[0] for xyc in xycs], [xyc[1] for xyc in xycs], c=[xyc[2] for xyc in xycs], alpha=0.5)
+      
+    plt.title(title)
+    plt.ylabel('Allele Frequency')
+    plt.xlabel('Position')
+    plt.gca().set_ylim([0.0, 1.0])
+
     # add calls
     for call in bafs['calls']:
-      plt.axvspan(call[0], call[1], facecolor='#00cc00', alpha=0.2)
+      if start is None:
+        plt.axvspan(call[0], call[1], facecolor='#00cc00', alpha=0.2)
+      else:
+        if call[0] <= finish and call[1] >= start:
+          call_s = max(start, call[0])
+          call_f = min(finish, call[1])
+          plt.axvspan(call_s, call_f, facecolor='#00cc00', alpha=0.2)
+
+    # highlight gene
+    if gene_starts is not None:
+      for gene_start, gene_finish, gene_name in zip(gene_starts, gene_finishes, gene_names):
+        logging.debug('annotating %s at %i %i in %i %i', gene_name, gene_start, gene_finish, start, finish)
+        if (gene_finish - gene_start) < (finish - start) * 0.005:
+          gene_finish = gene_start + (finish - start) * 0.005
+        logging.debug('annotating %s at %i %i', gene_name, gene_start, gene_finish)
+        plt.axvspan(gene_start, gene_finish, ymin=0.11, ymax=0.14, facecolor='#000000', alpha=1.0)
+        plt.text(gene_start, 0.07, gene_name, horizontalalignment='left', verticalalignment='bottom', bbox={'facecolor': 'yellow', 'alpha': 0.5})
 
     import matplotlib.patches as mpatches
     l1 = mpatches.Patch(color='green', label='LOH')
     l2 = mpatches.Patch(color='red', label='Not LOH')
     l3 = mpatches.Patch(color='blue', label='Favours LOH')
     l4 = mpatches.Patch(color='#c0c0c0', label='Neutral')
-    plt.legend( [l1, l2, l3, l4],['LOH', 'Not LOH', 'Favours LOH', 'Neutral'], loc = 'lower center', ncol=5, labelspacing=0. )
+    plt.legend( [l1, l2, l3, l4],['LOH', 'Not LOH', 'Favours LOH', 'Neutral'], loc = 'lower right', ncol=5, labelspacing=0. )
 
     plt.savefig(filename)
     plt.close()
@@ -51,13 +79,38 @@ def plot_bafs(filename, bafs):
     bafs = {'x': [], 'y': [], 'c': []}
     logging.info('wrote %s', filename)
 
-def calculate_segments(min_len, min_prop, noheader, plot):
+def check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes):
+  # additional regions
+  if regions is not None:
+    gene_starts = []
+    gene_finishes = []
+    gene_names = []
+    for name, region, padding in zip(region_names, regions, region_padding):
+      region_chrom, start_finish = region.split(':')
+      if region_chrom == last_chrom:
+        start, finish = [int(x) for x in start_finish.split('-')]
+        plot_start = max(0, start - padding)
+        plot_finish = finish + padding
+        plot_bafs('{}.{}.png'.format(plot, name), bafs, name, plot_start, plot_finish, [start], [finish], [name])
+        gene_starts.append(start)
+        gene_finishes.append(finish)
+        gene_names.append(name)
+    if plot_chromosomes:
+      logging.debug('plotting %s with regions: %s', last_chrom, ', '.join(gene_names))
+      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), None, None, gene_starts, gene_finishes, gene_names)
+  elif plot_chromosomes:
+    plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom))
+
+def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names, region_padding, plot_chromosomes):
   start = None # last potential end
   last = None # last potential end
   last_chrom = None
   loh_status = {'loh': False, 'accepts': 0, 'supports': 0, 'neutrals': 0}
   stats = collections.defaultdict(int)
   bafs = {'x': [], 'y': [], 'c': [], 'calls': []}
+
+  logging.info('regions: %s', ', '.join(regions))
+  logging.info('region names: %s', ', '.join(region_names))
 
   if not noheader:
     sys.stdout.write("Chr\tStart\tEnd\tAccept_Pct\tAccepts\tSupports\tNeutrals\tLength\n")
@@ -90,7 +143,7 @@ def calculate_segments(min_len, min_prop, noheader, plot):
       last = None
 
       if plot is not None and last_chrom != chrom:
-        plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs)
+        check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes)
         bafs = {'x': [], 'y': [], 'c': [], 'calls': []}
 
     else: # potential loh region
@@ -110,7 +163,7 @@ def calculate_segments(min_len, min_prop, noheader, plot):
 
   write_merged(start, last, loh_status, stats, min_len, min_prop, bafs)
   if plot is not None:
-    plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs)
+    check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes)
 
   logging.info('done: %s', ', '.join(['{}: {}'.format(k, stats[k]) for k in stats]))
 
@@ -120,11 +173,23 @@ if __name__ == '__main__':
   parser.add_argument('--min_len', default=1000, type=int, help='minimum segment size')
   parser.add_argument('--min_prop', type=float, default=0.1,  help='minimum accept proportion')
   parser.add_argument('--noheader', action='store_true',  help='no header for bed compatibility')
+  parser.add_argument('--regions', nargs='+',  help='regions of interest to check for LOH and plot e.g. chr2:47628206-47712367')
+  parser.add_argument('--region_names', nargs='+',  help='names of regions of interest')
+  parser.add_argument('--region_padding', nargs='+',  type=int, help='names of regions of interest')
   parser.add_argument('--plot', required=False, help='plot results with image prefix')
+  parser.add_argument('--plot_chromosomes', action='store_true', help='plot results with image prefix')
   args = parser.parse_args()
   if args.verbose:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.DEBUG)
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  calculate_segments(args.min_len, args.min_prop, args.noheader, args.plot)
+  if args.regions is not None and args.region_padding is None:
+    region_padding = [10000] * len(args.regions)
+  else:
+    region_padding = args.region_padding
+
+  if args.regions is not None and len(args.regions) != len(region_padding):
+    logging.error('Region lengths do not match')
+    sys.exit(1)
+  calculate_segments(args.min_len, args.min_prop, args.noheader, args.plot, args.regions, args.region_names, region_padding, args.plot_chromosomes)
