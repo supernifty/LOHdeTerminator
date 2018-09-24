@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 '''
-  loh
+  plots areas that are proposed to contain loh
 '''
 
 import argparse

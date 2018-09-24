@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 '''
-  given tumour and germline vcf pairs, explore msi status
+  generate a list of loh evidence based on an input vcf
+  output from this file is used as input to loh_merge
+  - supported callers: strelka
 '''
 
 import argparse
