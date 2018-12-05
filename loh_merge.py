@@ -15,6 +15,7 @@ import intervaltree
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+matplotlib.rcParams.update({'font.size': 18})
 
 def write_merged(start, last, loh_status, stats, min_len, min_prop, bafs):
   if loh_status['loh'] and loh_status['accepts'] > 0:
@@ -32,36 +33,37 @@ def write_merged(start, last, loh_status, stats, min_len, min_prop, bafs):
 
 def plot_bafs(filename, bafs, title, start, finish, gene_starts, gene_finishes, gene_names, annotate):
   if len(bafs['x']) > 0:
+    x_mb = [x / 1000000 for x in bafs['x']]
     plt.figure(figsize=(24, 8))
     if start is None:
-      plt.scatter(bafs['x'], bafs['y'], c=bafs['c'], alpha=0.5)
+      plt.scatter(x_mb, bafs['y'], c=bafs['c'], alpha=0.5)
       start = 0
       finish = max(bafs['x'])
       if annotate:
-        for x, y, l in zip(bafs['x'], bafs['y'], bafs['l']):
+        for x, y, l in zip(x_mb, bafs['y'], bafs['l']):
           plt.annotate(l, x, y)
     else:
-      xycs = [xyc for xyc in zip(bafs['x'], bafs['y'], bafs['c']) if start <= xyc[0] <= finish]
-      plt.scatter([xyc[0] for xyc in xycs], [xyc[1] for xyc in xycs], c=[xyc[2] for xyc in xycs], alpha=0.5)
-      if annotate:
-        for x, y, l in zip(bafs['x'], bafs['y'], bafs['l']):
-          logging.debug(l)
-          plt.annotate(text=l, xy=(x, y))
-      
-    plt.title(title)
-    plt.ylabel('Allele Frequency')
-    plt.xlabel('Position')
+      xycs = [xyc for xyc in zip(x_mb, bafs['y'], bafs['c']) if start / 1000000 <= xyc[0] <= finish / 1000000]
+      if len(xycs) > 0:
+        plt.scatter([xyc[0] for xyc in xycs], [xyc[1] for xyc in xycs], c=[xyc[2] for xyc in xycs], alpha=0.5)
+        if annotate:
+          for x, y, l in zip(x_mb, bafs['y'], bafs['l']):
+            plt.annotate(s=l, xy=(x, y))
+
+    plt.title('Genomic regions containing evidence for LOH across {}'.format(title))
+    plt.ylabel('Tumour Allele Frequency')
+    plt.xlabel('Genomic Position (MB)')
     plt.gca().set_ylim([0.0, 1.0])
 
     # add calls
     for call in bafs['calls']:
       if start is None:
-        plt.axvspan(call[0], call[1], facecolor='#00cc00', alpha=0.2)
+        plt.axvspan(call[0] / 1000000, call[1] / 1000000, facecolor='#00cc00', alpha=0.2)
       else:
         if call[0] <= finish and call[1] >= start:
           call_s = max(start, call[0])
           call_f = min(finish, call[1])
-          plt.axvspan(call_s, call_f, facecolor='#00cc00', alpha=0.2)
+          plt.axvspan(call_s / 1000000, call_f / 1000000, facecolor='#00cc00', alpha=0.2)
 
     # highlight gene
     if gene_starts is not None:
@@ -70,8 +72,8 @@ def plot_bafs(filename, bafs, title, start, finish, gene_starts, gene_finishes, 
         if (gene_finish - gene_start) < (finish - start) * 0.005:
           gene_finish = gene_start + (finish - start) * 0.005
         logging.debug('annotating %s at %i %i', gene_name, gene_start, gene_finish)
-        plt.axvspan(gene_start, gene_finish, ymin=0.11, ymax=0.14, facecolor='#000000', alpha=1.0)
-        plt.text(gene_start, 0.07, gene_name, horizontalalignment='left', verticalalignment='bottom', bbox={'facecolor': 'yellow', 'alpha': 0.5})
+        plt.axvspan(gene_start / 1000000, gene_finish / 1000000, ymin=0.11, ymax=0.14, facecolor='#000000', alpha=1.0)
+        plt.text(gene_start / 1000000, 0.07, gene_name, horizontalalignment='left', verticalalignment='bottom', bbox={'facecolor': 'yellow', 'alpha': 0.5})
 
     import matplotlib.patches as mpatches
     l1 = mpatches.Patch(color='green', label='LOH')
