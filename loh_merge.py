@@ -72,8 +72,8 @@ def plot_bafs(filename, bafs, title, start, finish, gene_starts, gene_finishes, 
         if (gene_finish - gene_start) < (finish - start) * 0.005:
           gene_finish = gene_start + (finish - start) * 0.005
         logging.debug('annotating %s at %i %i', gene_name, gene_start, gene_finish)
-        plt.axvspan(gene_start / 1000000, gene_finish / 1000000, ymin=0.11, ymax=0.14, facecolor='#000000', alpha=1.0)
-        plt.text(gene_start / 1000000, 0.07, gene_name, horizontalalignment='left', verticalalignment='bottom', bbox={'facecolor': 'yellow', 'alpha': 0.5})
+        plt.axvspan(gene_start / 1000000, gene_finish / 1000000, ymin=0.16, ymax=0.21, facecolor='#000000', alpha=0.8)
+        plt.text(gene_start / 1000000, 0.11, gene_name, horizontalalignment='left', verticalalignment='bottom', bbox={'facecolor': 'yellow', 'alpha': 0.5})
 
     import matplotlib.patches as mpatches
     l1 = mpatches.Patch(color='green', label='LOH')
@@ -88,7 +88,7 @@ def plot_bafs(filename, bafs, title, start, finish, gene_starts, gene_finishes, 
     bafs = {'x': [], 'y': [], 'c': []}
     logging.info('wrote %s', filename)
 
-def check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate):
+def check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample):
   # additional regions
   if regions is not None:
     gene_starts = []
@@ -105,17 +105,35 @@ def check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, b
         else:
           plot_start = max(0, start - int(padding))
           plot_finish = finish + int(padding)
-        plot_bafs('{}.{}.png'.format(plot, name), bafs, name, plot_start, plot_finish, [start], [finish], [name], annotate)
+        if sample is not None:
+          plot_bafs('{}.{}.png'.format(plot, name), bafs, '{} for sample {}'.format(name, sample), plot_start, plot_finish, [start], [finish], [name], annotate)
+        else:
+          plot_bafs('{}.{}.png'.format(plot, name), bafs, name, plot_start, plot_finish, [start], [finish], [name], annotate)
         gene_starts.append(start)
         gene_finishes.append(finish)
         gene_names.append(name)
     if plot_chromosomes:
       logging.debug('plotting %s with regions: %s', last_chrom, ', '.join(gene_names))
-      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), None, None, gene_starts, gene_finishes, gene_names, False) # don't annotate chroms
+      if sample is not None:
+        plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {} for sample {}'.format(last_chrom, sample), None, None, gene_starts, gene_finishes, gene_names, False) # don't annotate chroms
+      else:
+        plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), None, None, gene_starts, gene_finishes, gene_names, False) # don't annotate chroms
+    if plot_custom is not None:
+      chromosome, coords = plot_custom.split(':')
+      if chromosome == last_chrom:
+        logging.debug('plotting %s with regions: %s to %s', last_chrom, ', '.join(gene_names), plot_custom)
+        start, finish = coords.split('-')
+        if sample is not None:
+          plot_bafs('{}.custom.png'.format(plot), bafs, 'Chromosome {} from {} to {:.0f}M for sample {}'.format(chromosome, start, int(finish) / 1000000, sample), int(start), int(finish), gene_starts, gene_finishes, gene_names, False) # don't annotate custom
+        else:
+          plot_bafs('{}.custom.png'.format(plot), bafs, 'Chromosome {} from {} to {:.0f}M'.format(chromosome, start, int(finish) / 1000000), int(start), int(finish), gene_starts, gene_finishes, gene_names, False) # don't annotate custom
   elif plot_chromosomes:
-    plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), False) # don't annotate chroms
+    if sample is not None:
+      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {} for sample {}'.format(last_chrom, sample), False) # don't annotate chroms
+    else:
+      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), False) # don't annotate chroms
 
-def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names, region_padding, plot_chromosomes, annotate):
+def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names, region_padding, plot_chromosomes, annotate, plot_custom, sample):
   start = None # last potential end
   last = None # last potential end
   chrom = None
@@ -130,6 +148,7 @@ def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names,
   if not noheader:
     sys.stdout.write("Chr\tStart\tEnd\tAccept_Pct\tAccepts\tSupports\tNeutrals\tLength\n")
 
+  logging.info('reading from stdin...')
   for line in sys.stdin:
     if line.startswith('chrom'): # header
       continue
@@ -161,7 +180,7 @@ def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names,
       last = None
 
       if plot is not None and last_chrom != chrom:
-        check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate)
+        check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample)
         bafs = {'x': [], 'y': [], 'c': [], 'calls': [], 'l': []}
 
     else: # potential loh region
@@ -181,7 +200,7 @@ def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names,
 
   write_merged(start, last, loh_status, stats, min_len, min_prop, bafs)
   if plot is not None and chrom is not None:
-    check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate)
+    check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample)
 
   logging.info('done: %s', ', '.join(['{}: {}'.format(k, stats[k]) for k in stats]))
 
@@ -194,6 +213,8 @@ if __name__ == '__main__':
   parser.add_argument('--regions', nargs='+',  help='regions of interest to check for LOH and plot e.g. chr2:47628206-47712367')
   parser.add_argument('--region_names', nargs='+',  help='names of regions of interest')
   parser.add_argument('--region_padding', nargs='+', help='names of regions of interest')
+  parser.add_argument('--plot_custom', required=False, help='custom region to plot like a chromosome')
+  parser.add_argument('--sample', required=False, help='sample name to put in title')
   parser.add_argument('--plot', required=False, help='plot results with image prefix')
   parser.add_argument('--plot_chromosomes', action='store_true', help='plot results with image prefix')
   parser.add_argument('--annotate', action='store_true', help='include variant locations on region plots')
@@ -211,4 +232,4 @@ if __name__ == '__main__':
   if args.regions is not None and len(args.regions) != len(region_padding):
     logging.error('Region lengths do not match')
     sys.exit(1)
-  calculate_segments(args.min_len, args.min_prop, args.noheader, args.plot, args.regions, args.region_names, region_padding, args.plot_chromosomes, args.annotate)
+  calculate_segments(args.min_len, args.min_prop, args.noheader, args.plot, args.regions, args.region_names, region_padding, args.plot_chromosomes, args.annotate, args.plot_custom, args.sample)
