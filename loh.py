@@ -11,6 +11,8 @@ import logging
 import math
 import sys
 
+import version
+
 PASSED='+'
 FILTERED=''
 
@@ -124,6 +126,7 @@ def main(tumour, germline, neutral_variants, filtered_variants, min_dp_germline,
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='LOH caller')
+  parser.add_argument('--version', action='version', version=version.PROGRAM_VERSION)
   parser.add_argument('--tumour', required=True, help='tumour sample name')
   parser.add_argument('--germline', required=True, help='germline sample name')
   parser.add_argument('--neutral_variants', action="store_true", help='include neutral variants')
