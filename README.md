@@ -20,3 +20,14 @@ python loh_merge.py --noheader --min_len 1000 --min_prop 0.1 < loh.tsv > loh.mer
 |ref |      neutral | accept | support |
 |het |      reject  | reject | reject |
 |hom |      support | accept | neutral |
+
+## Output
+
+* chrom: chromosome
+* start: start of LOH region
+* end: end of LOH region
+* accept_pct: proportion of variants in the region in the "accept" category compared to accept + support + neutral
+* accepts: number of accept variants
+* supports: number of supporting variants
+* neutrals: number of neutral variants
+* length: length of region
