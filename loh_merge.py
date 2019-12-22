@@ -60,6 +60,7 @@ def plot_bafs(filename, bafs, sample, start, finish, gene_starts, gene_finishes,
     plt.ylabel('Allele Frequency')
     plt.xlabel('Genomic Position (MB)')
     plt.gca().set_ylim([0.0, 1.0])
+    plt.gca().set_xlim([start / 1000000, finish / 1000000])
 
     # add calls
     for call in bafs['calls']:
