@@ -148,9 +148,9 @@ def check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, b
           plot_bafs('{}.custom.png'.format(plot), bafs, 'Chromosome {} from {:.0f}M to {:.0f}M'.format(chromosome, int(start) / 1000000, int(finish) / 1000000), int(start), int(finish), gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title)
   elif plot_chromosomes:
     if sample is not None:
-      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {} for sample {}'.format(last_chrom, sample), False, width, height, no_legend, annotation_style, title)
+      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {} for sample {}'.format(last_chrom, sample), None, None, [], [], [], False, width, height, no_legend, annotation_style, title)
     else:
-      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), False, width, height, no_legend, annotation_style, title)
+      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), None, None, [], [], [], False, width, height, no_legend, annotation_style, title)
 
 def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names, region_padding, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title):
   start = None # last potential end
@@ -161,8 +161,11 @@ def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names,
   stats = collections.defaultdict(int)
   bafs = {'x': [], 'y': [], 'c': [], 'calls': [], 'l': []}
 
-  logging.info('regions: %s', ', '.join(regions))
-  logging.info('region names: %s', ', '.join(region_names))
+  if regions is not None:
+    logging.info('regions: %s', ', '.join(regions))
+
+  if region_names is not None:
+    logging.info('region names: %s', ', '.join(region_names))
 
   if not noheader:
     sys.stdout.write("Chr\tStart\tEnd\tAccept_Pct\tAccepts\tSupports\tNeutrals\tLength\n")
