@@ -23,10 +23,6 @@ MAX_AF_HET_GL=0.7
 MIN_HET_HOM_DIFF=0.3 # het -> hom diff required (accept)
 MIN_HOM_REF_DIFF=0.6 # hom -> hom diff required (support)
 
-# het in the tumour
-MIN_AF_HET_TUMOUR=0.3
-MAX_AF_HET_TUMOUR=0.7
-
 def calculate_af(variant, sample_id):
   try:
     ad_ref, ad_alt = variant.format("AD")[sample_id][:2]
@@ -56,7 +52,12 @@ def write(stats, variant, germline_af, tumour_af, germline_dp, tumour_dp, cat):
   sys.stdout.write('{}\t{}\t{:.2f}\t{:.2f}\t{}\t{}\t{}{}\n'.format(variant.CHROM, variant.POS, germline_af, tumour_af, germline_dp, tumour_dp, cat, pass_marker))
   stats[cat] += 1
 
-def main(tumour, germline, neutral_variants, filtered_variants, min_dp_germline, min_dp_tumour, min_af):
+def main(tumour, germline, neutral_variants, filtered_variants, min_dp_germline, min_dp_tumour, min_af, tumour_cellularity):
+  # calculate tumour thresholds based on cellularity
+  min_af_het_tumour= 0.3 * tumour_cellularity
+  max_af_het_tumour= 0.7 * tumour_cellularity
+  logging.info('tumour cutoffs are %.2f to %.2f with cellularity %.2f', min_af_het_tumour, max_af_het_tumour, tumour_cellularity)
+
   logging.info('reading vcf from stdin...')
   vcf_in = cyvcf2.VCF('-')
   skipped_pass = count = 0
@@ -106,16 +107,16 @@ def main(tumour, germline, neutral_variants, filtered_variants, min_dp_germline,
     stats['af_t_max'] = max(stats['af_t_max'], tumour_af)
 
     # het -> hom
-    if MIN_AF_HET_GL < germline_af < MAX_AF_HET_GL and abs(germline_af - tumour_af) > MIN_HET_HOM_DIFF:
+    if MIN_AF_HET_GL < germline_af < MAX_AF_HET_GL and abs(germline_af - tumour_af / tumour_cellularity) > MIN_HET_HOM_DIFF:
       write(stats, variant, germline_af, tumour_af, germline_ad_ref + germline_ad_alt, tumour_ad_ref + tumour_ad_alt, 'accept')
       stats['accept'] += 1
 
     # hom -> ref or ref -> hom
-    elif abs(germline_af - tumour_af) > MIN_HOM_REF_DIFF:
+    elif abs(germline_af - tumour_af / tumour_cellularity) > MIN_HOM_REF_DIFF:
       write(stats, variant, germline_af, tumour_af, germline_ad_ref + germline_ad_alt, tumour_ad_ref + tumour_ad_alt, 'support')
 
     # * -> het
-    elif MIN_AF_HET_TUMOUR < tumour_af < MAX_AF_HET_TUMOUR:
+    elif min_af_het_tumour < tumour_af < max_af_het_tumour:
       write(stats, variant, germline_af, tumour_af, germline_ad_ref + germline_ad_alt, tumour_ad_ref + tumour_ad_alt, 'reject')
 
     # het -> ambiguous, hom -> hom, ref -> ref
@@ -128,6 +129,7 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='LOH caller')
   parser.add_argument('--version', action='version', version=version.PROGRAM_VERSION)
   parser.add_argument('--tumour', required=True, help='tumour sample name')
+  parser.add_argument('--tumour_cellularity', required=False, type=float, default=1.0, help='tumour cellularity')
   parser.add_argument('--germline', required=True, help='germline sample name')
   parser.add_argument('--neutral_variants', action="store_true", help='include neutral variants')
   parser.add_argument('--filtered_variants', action="store_true", help='include filtered variants')
@@ -141,4 +143,4 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.tumour, args.germline, args.neutral_variants, args.filtered_variants, args.min_dp_germline, args.min_dp_tumour, args.min_af)
+  main(args.tumour, args.germline, args.neutral_variants, args.filtered_variants, args.min_dp_germline, args.min_dp_tumour, args.min_af, args.tumour_cellularity)
