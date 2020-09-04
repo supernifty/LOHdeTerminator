@@ -44,13 +44,17 @@ def plot_bafs(filename, bafs, sample, start, finish, gene_starts, gene_finishes,
       if annotate:
         for x, y, l in zip(x_mb, bafs['y'], bafs['l']):
           plt.annotate(l, x, y)
+      # germline
+      plt.scatter(x_mb, bafs['g'], c='#c0c0c0', alpha=0.5, marker='+')
     else:
-      xycs = [xyc for xyc in zip(x_mb, bafs['y'], bafs['c']) if start / 1000000 <= xyc[0] <= finish / 1000000]
+      xycs = [xyc for xyc in zip(x_mb, bafs['y'], bafs['c'], bafs['g']) if start / 1000000 <= xyc[0] <= finish / 1000000]
       if len(xycs) > 0:
         plt.scatter([xyc[0] for xyc in xycs], [xyc[1] for xyc in xycs], c=[xyc[2] for xyc in xycs], alpha=0.5)
         if annotate:
           for x, y, l in zip(x_mb, bafs['y'], bafs['l']):
             plt.annotate(s=l, xy=(x, y))
+        # germline
+        plt.scatter([xyc[0] for xyc in xycs], [xyc[3] for xyc in xycs], c='#c0c0c0', alpha=0.5, marker='+')
 
     if title is None:
       plt.title('Genomic regions containing evidence for LOH across {}'.format(sample))
@@ -159,7 +163,7 @@ def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names,
   last_chrom = None
   loh_status = {'loh': False, 'accepts': 0, 'supports': 0, 'neutrals': 0}
   stats = collections.defaultdict(int)
-  bafs = {'x': [], 'y': [], 'c': [], 'calls': [], 'l': []}
+  bafs = {'x': [], 'y': [], 'g': [], 'c': [], 'calls': [], 'l': []}
 
   if regions is not None:
     logging.info('regions: %s', ', '.join(regions))
@@ -177,12 +181,14 @@ def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names,
     fields = line.strip('\n').split('\t')
     chrom = fields[0]
     pos = int(fields[1])
-    baf = float(fields[3])
+    gaf = float(fields[2]) # germline af
+    baf = float(fields[3]) # tumour af
     status = fields[6]
 
     if plot is not None:
       bafs['x'].append(pos)
       bafs['y'].append(baf)
+      bafs['g'].append(gaf)
       if status.startswith('accept'):
         bafs['c'].append('green')
       elif status.startswith('reject'):
@@ -203,7 +209,7 @@ def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names,
 
       if plot is not None and last_chrom != chrom:
         check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title)
-        bafs = {'x': [], 'y': [], 'c': [], 'calls': [], 'l': []}
+        bafs = {'x': [], 'y': [], 'g': [], 'c': [], 'calls': [], 'l': []}
 
     else: # potential loh region
       if start is None:
