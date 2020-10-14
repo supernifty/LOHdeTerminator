@@ -19,42 +19,43 @@ matplotlib.rcParams.update({'font.size': 18})
 
 import version
 
-def write_merged(start, last, loh_status, stats, min_len, min_prop, bafs):
+def write_merged(start, last, loh_status, stats, min_len, min_prop, min_count, bafs, max_loh_without_evidence):
   if loh_status['loh'] and loh_status['accepts'] > 0:
-    length = last[1] - start[1]
+    new_last = min(last[1], loh_status['last_accept_or_support'][1] + max_loh_without_evidence)
+    length = new_last - start[1]
     prop = loh_status['accepts'] / (loh_status['accepts'] + loh_status['supports'] + loh_status['neutrals'])
-    if length > min_len and prop > min_prop:
-      sys.stdout.write("{chrom}\t{start}\t{end}\t{accept_pct:.1f}\t{accepts}\t{supports}\t{neutrals}\t{length}\n".format(chrom=start[0], start=start[1], end=last[1], accept_pct=100. * prop, accepts=loh_status['accepts'], supports=loh_status['supports'], neutrals=loh_status['neutrals'], length=length))
+    if length > min_len and prop > min_prop and loh_status['accepts'] + loh_status['supports'] >= min_count:
+      sys.stdout.write("{chrom}\t{start}\t{end}\t{accept_pct:.1f}\t{accepts}\t{supports}\t{neutrals}\t{length}\n".format(chrom=start[0], start=start[1], end=new_last, accept_pct=100. * prop, accepts=loh_status['accepts'], supports=loh_status['supports'], neutrals=loh_status['neutrals'], length=length))
       stats['count'] += 1
       stats['length'] += length
       stats['count-{}'.format(start[0])] += 1
       stats['length-{}'.format(start[0])] += length
-      bafs['calls'].append((start[1], last[1]))
+      bafs['calls'].append((start[1], new_last))
       return True
   return False
 
-def plot_bafs(filename, bafs, sample, start, finish, gene_starts, gene_finishes, gene_names, annotate, width, height, no_legend, annotation_style, title):
+def plot_bafs(filename, bafs, sample, start, finish, gene_starts, gene_finishes, gene_names, annotate, width, height, no_legend, annotation_style, title, legend_location):
   if len(bafs['x']) > 0:
     x_mb = [x / 1000000 for x in bafs['x']]
     plt.figure(figsize=(width, height))
     if start is None:
-      plt.scatter(x_mb, bafs['y'], c=bafs['c'], alpha=0.5)
+      somatic_patch = plt.scatter(x_mb, bafs['y'], c=bafs['c'], alpha=0.5, label='Somatic')
       start = 0
       finish = max(bafs['x'])
       if annotate:
         for x, y, l in zip(x_mb, bafs['y'], bafs['l']):
           plt.annotate(l, x, y)
       # germline
-      plt.scatter(x_mb, bafs['g'], c='#c0c0c0', alpha=0.5, marker='+')
+      germline_patch = plt.scatter(x_mb, bafs['g'], c='#303030', alpha=0.7, marker='+', label='Germline')
     else:
       xycs = [xyc for xyc in zip(x_mb, bafs['y'], bafs['c'], bafs['g']) if start / 1000000 <= xyc[0] <= finish / 1000000]
       if len(xycs) > 0:
-        plt.scatter([xyc[0] for xyc in xycs], [xyc[1] for xyc in xycs], c=[xyc[2] for xyc in xycs], alpha=0.5)
+        somatic_patch = plt.scatter([xyc[0] for xyc in xycs], [xyc[1] for xyc in xycs], c=[xyc[2] for xyc in xycs], alpha=0.5, label='Somatic')
         if annotate:
           for x, y, l in zip(x_mb, bafs['y'], bafs['l']):
             plt.annotate(s=l, xy=(x, y))
         # germline
-        plt.scatter([xyc[0] for xyc in xycs], [xyc[3] for xyc in xycs], c='#c0c0c0', alpha=0.5, marker='+')
+        germline_patch = plt.scatter([xyc[0] for xyc in xycs], [xyc[3] for xyc in xycs], c='#303030', alpha=0.7, marker='+', label='Germline')
 
     if title is None:
       plt.title('Genomic regions containing evidence for LOH across {}'.format(sample))
@@ -65,6 +66,8 @@ def plot_bafs(filename, bafs, sample, start, finish, gene_starts, gene_finishes,
     plt.xlabel('Genomic Position (MB)')
     plt.gca().set_ylim([0.0, 1.0])
     plt.gca().set_xlim([start / 1000000, finish / 1000000])
+
+    plt.grid(which='major', axis='y', linewidth=1)
 
     # add calls
     for call in bafs['calls']:
@@ -101,7 +104,7 @@ def plot_bafs(filename, bafs, sample, start, finish, gene_starts, gene_finishes,
     l4 = mpatches.Patch(color='#c0c0c0', label='Neutral')
     
     if not no_legend:
-      plt.legend( [l1, l2, l3, l4],['LOH', 'Not LOH', 'Favours LOH', 'Neutral'], loc = 'lower left', ncol=5, labelspacing=0., framealpha=0.7 )
+      plt.legend([l1, l2, l3, l4, somatic_patch, germline_patch],['LOH', 'Not LOH', 'Favours LOH', 'Neutral', 'Somatic', 'Germline'], loc=legend_location, ncol=7, labelspacing=0., framealpha=0.7)
 
     plt.tight_layout()
     plt.savefig(filename)
@@ -110,7 +113,7 @@ def plot_bafs(filename, bafs, sample, start, finish, gene_starts, gene_finishes,
     bafs = {'x': [], 'y': [], 'c': []}
     logging.info('wrote %s', filename)
 
-def check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title):
+def check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title, legend_location):
   # additional regions
   if regions is not None:
     gene_starts = []
@@ -129,34 +132,34 @@ def check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, b
           plot_finish = finish + int(padding)
         if sample is not None:
           #plot_bafs('{}.{}.png'.format(plot, name), bafs, '{} for sample {}'.format(name, sample), plot_start, plot_finish, [start], [finish], [name], annotate, width, height)
-          plot_bafs('{}.{}.png'.format(plot, name), bafs, 'Sample {}'.format(sample), plot_start, plot_finish, [start], [finish], [name], annotate, width, height, no_legend, annotation_style, title)
+          plot_bafs('{}.{}.png'.format(plot, name), bafs, 'Sample {}'.format(sample), plot_start, plot_finish, [start], [finish], [name], annotate, width, height, no_legend, annotation_style, title, legend_location)
         else:
-          plot_bafs('{}.{}.png'.format(plot, name), bafs, name, plot_start, plot_finish, [start], [finish], [name], annotate, width, height, no_legend, annotation_style, title)
+          plot_bafs('{}.{}.png'.format(plot, name), bafs, name, plot_start, plot_finish, [start], [finish], [name], annotate, width, height, no_legend, annotation_style, title, legend_location)
         gene_starts.append(start)
         gene_finishes.append(finish)
         gene_names.append(name)
     if plot_chromosomes:
       logging.debug('plotting %s with regions: %s', last_chrom, ', '.join(gene_names))
       if sample is not None:
-        plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Sample {}'.format(sample), None, None, gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title)
+        plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Sample {}'.format(sample), None, None, gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title, legend_location)
       else:
-        plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), None, None, gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title)
+        plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), None, None, gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title, legend_location)
     if plot_custom is not None:
       chromosome, coords = plot_custom.split(':')
       if chromosome == last_chrom:
         logging.debug('plotting %s with regions: %s to %s', last_chrom, ', '.join(gene_names), plot_custom)
         start, finish = coords.split('-')
         if sample is not None:
-          plot_bafs('{}.custom.png'.format(plot), bafs, 'Sample {}'.format(sample), int(start), int(finish), gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title)
+          plot_bafs('{}.custom.png'.format(plot), bafs, 'Sample {}'.format(sample), int(start), int(finish), gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title, legend_location)
         else:
-          plot_bafs('{}.custom.png'.format(plot), bafs, 'Chromosome {} from {:.0f}M to {:.0f}M'.format(chromosome, int(start) / 1000000, int(finish) / 1000000), int(start), int(finish), gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title)
+          plot_bafs('{}.custom.png'.format(plot), bafs, 'Chromosome {} from {:.0f}M to {:.0f}M'.format(chromosome, int(start) / 1000000, int(finish) / 1000000), int(start), int(finish), gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title, legend_location)
   elif plot_chromosomes:
     if sample is not None:
-      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {} for sample {}'.format(last_chrom, sample), None, None, [], [], [], False, width, height, no_legend, annotation_style, title)
+      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {} for sample {}'.format(last_chrom, sample), None, None, [], [], [], False, width, height, no_legend, annotation_style, title, legend_location)
     else:
-      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), None, None, [], [], [], False, width, height, no_legend, annotation_style, title)
+      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), None, None, [], [], [], False, width, height, no_legend, annotation_style, title, legend_location)
 
-def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names, region_padding, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title):
+def calculate_segments(min_len, min_prop, min_count, noheader, plot, regions, region_names, region_padding, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title, legend_location, max_loh_without_evidence):
   start = None # last potential end
   last = None # last potential end
   chrom = None
@@ -175,7 +178,7 @@ def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names,
     sys.stdout.write("Chr\tStart\tEnd\tAccept_Pct\tAccepts\tSupports\tNeutrals\tLength\n")
 
   logging.info('reading from stdin...')
-  for line in sys.stdin:
+  for line in sys.stdin: # each point of evidence
     if line.startswith('chrom'): # header
       continue
     fields = line.strip('\n').split('\t')
@@ -202,13 +205,13 @@ def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names,
         bafs['l'].append(str(pos))
 
     if status.startswith('reject') or last_chrom != chrom: # end of loh
-      write_merged(start, last, loh_status, stats, min_len, min_prop, bafs)
+      write_merged(start, last, loh_status, stats, min_len, min_prop, min_count, bafs, max_loh_without_evidence)
       loh_status = {'loh': False, 'accepts': 0, 'supports': 0, 'neutrals': 0}
       start = None
       last = None
 
       if plot is not None and last_chrom != chrom:
-        check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title)
+        check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title, legend_location)
         bafs = {'x': [], 'y': [], 'g': [], 'c': [], 'calls': [], 'l': []}
 
     else: # potential loh region
@@ -217,18 +220,20 @@ def calculate_segments(min_len, min_prop, noheader, plot, regions, region_names,
       loh_status['loh'] = True
       if status.startswith('accept'):
         loh_status['accepts'] += 1
+        loh_status['last_accept_or_support'] = (chrom, pos)
       elif status.startswith('support'):
         loh_status['supports'] += 1
+        loh_status['last_accept_or_support'] = (chrom, pos)
       elif status.startswith('neutral'):
         loh_status['neutrals'] += 1
 
-      last = (chrom, pos)
+      last = (chrom, pos) # last seen of any non-reject
 
     last_chrom = chrom
 
-  write_merged(start, last, loh_status, stats, min_len, min_prop, bafs)
+  write_merged(start, last, loh_status, stats, min_len, min_prop, min_count, bafs, max_loh_without_evidence)
   if plot is not None and chrom is not None:
-    check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title)
+    check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title, legend_location)
 
   logging.info('done: %s', ', '.join(['{}: {}'.format(k, stats[k]) for k in stats]))
 
@@ -238,7 +243,10 @@ if __name__ == '__main__':
   parser.add_argument('--verbose', action='store_true', help='more logging')
   parser.add_argument('--min_len', default=1000, type=int, help='minimum segment size')
   parser.add_argument('--min_prop', type=float, default=0.1,  help='minimum accept proportion')
+  parser.add_argument('--min_count', type=int, default=1,  help='minimum number of non-negative variants required')
+  parser.add_argument('--max_loh_without_evidence', type=int, default=1000000, help='maximum size of loh without evidence')
   parser.add_argument('--nolegend', action='store_true',  help='no legend on plot')
+  parser.add_argument('--legend_location', default='lower left', help='location')
   parser.add_argument('--noheader', action='store_true',  help='no header for bed compatibility')
   parser.add_argument('--regions', nargs='+',  help='regions of interest to check for LOH and plot e.g. chr2:47628206-47712367')
   parser.add_argument('--region_names', nargs='+',  help='names of regions of interest')
@@ -266,4 +274,4 @@ if __name__ == '__main__':
   if args.regions is not None and len(args.regions) != len(region_padding):
     logging.error('Region lengths do not match')
     sys.exit(1)
-  calculate_segments(args.min_len, args.min_prop, args.noheader, args.plot, args.regions, args.region_names, region_padding, args.plot_chromosomes, args.annotate, args.plot_custom, args.sample, args.width, args.height, args.nolegend, args.annotation_style, args.title)
+  calculate_segments(args.min_len, args.min_prop, args.min_count, args.noheader, args.plot, args.regions, args.region_names, region_padding, args.plot_chromosomes, args.annotate, args.plot_custom, args.sample, args.width, args.height, args.nolegend, args.annotation_style, args.title, args.legend_location, args.max_loh_without_evidence)

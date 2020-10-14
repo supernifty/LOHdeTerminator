@@ -31,3 +31,7 @@ python loh_merge.py --noheader --min_len 1000 --min_prop 0.1 < loh.tsv > loh.mer
 * supports: number of supporting variants
 * neutrals: number of neutral variants
 * length: length of region
+
+## Authors
+* Romy Walker
+* Peter Georgeson
