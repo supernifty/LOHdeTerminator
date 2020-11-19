@@ -17,8 +17,6 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 matplotlib.rcParams.update({'font.size': 18})
 
-DPI=300
-
 import version
 
 def write_merged(start, last, loh_status, stats, min_len, min_prop, min_count, bafs, max_loh_without_evidence):
@@ -36,7 +34,7 @@ def write_merged(start, last, loh_status, stats, min_len, min_prop, min_count, b
       return True
   return False
 
-def plot_bafs(filename, bafs, sample, start, finish, gene_starts, gene_finishes, gene_names, annotate, width, height, no_legend, annotation_style, title, legend_location, markersize):
+def plot_bafs(filename, bafs, sample, start, finish, gene_starts, gene_finishes, gene_names, annotate, width, height, no_legend, annotation_style, title, legend_location, markersize, dpi):
   somatic_patch = germline_patch = None
   if len(bafs['x']) > 0:
     x_mb = [x / 1000000 for x in bafs['x']]
@@ -113,13 +111,13 @@ def plot_bafs(filename, bafs, sample, start, finish, gene_starts, gene_finishes,
         plt.legend([l1, l2, l3, l4],['LOH', 'Not LOH'], loc=legend_location, ncol=5, labelspacing=0., framealpha=0.7)
 
     plt.tight_layout()
-    plt.savefig(filename, dpi=DPI)
+    plt.savefig(filename, dpi=dpi)
     plt.close()
 
     bafs = {'x': [], 'y': [], 'c': []}
     logging.info('wrote %s', filename)
 
-def check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title, legend_location, markersize):
+def check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title, legend_location, markersize, dpi):
   # additional regions
   if regions is not None:
     gene_starts = []
@@ -138,34 +136,34 @@ def check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, b
           plot_finish = finish + int(padding)
         if sample is not None:
           #plot_bafs('{}.{}.png'.format(plot, name), bafs, '{} for sample {}'.format(name, sample), plot_start, plot_finish, [start], [finish], [name], annotate, width, height)
-          plot_bafs('{}.{}.png'.format(plot, name), bafs, 'Sample {}'.format(sample), plot_start, plot_finish, [start], [finish], [name], annotate, width, height, no_legend, annotation_style, title, legend_location, markersize)
+          plot_bafs('{}.{}.png'.format(plot, name), bafs, 'Sample {}'.format(sample), plot_start, plot_finish, [start], [finish], [name], annotate, width, height, no_legend, annotation_style, title, legend_location, markersize, dpi)
         else:
-          plot_bafs('{}.{}.png'.format(plot, name), bafs, name, plot_start, plot_finish, [start], [finish], [name], annotate, width, height, no_legend, annotation_style, title, legend_location, markersize)
+          plot_bafs('{}.{}.png'.format(plot, name), bafs, name, plot_start, plot_finish, [start], [finish], [name], annotate, width, height, no_legend, annotation_style, title, legend_location, markersize, dpi)
         gene_starts.append(start)
         gene_finishes.append(finish)
         gene_names.append(name)
     if plot_chromosomes:
       logging.debug('plotting %s with regions: %s', last_chrom, ', '.join(gene_names))
       if sample is not None:
-        plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Sample {}'.format(sample), None, None, gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title, legend_location, markersize)
+        plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Sample {}'.format(sample), None, None, gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title, legend_location, markersize, dpi)
       else:
-        plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), None, None, gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title, legend_location, markersize)
+        plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), None, None, gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title, legend_location, markersize, dpi)
     if plot_custom is not None:
       chromosome, coords = plot_custom.split(':')
       if chromosome == last_chrom:
         logging.debug('plotting %s with regions: %s to %s', last_chrom, ', '.join(gene_names), plot_custom)
         start, finish = coords.split('-')
         if sample is not None:
-          plot_bafs('{}.custom.png'.format(plot), bafs, 'Sample {}'.format(sample), int(start), int(finish), gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title, legend_location, markersize)
+          plot_bafs('{}.custom.png'.format(plot), bafs, 'Sample {}'.format(sample), int(start), int(finish), gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title, legend_location, markersize, dpi)
         else:
-          plot_bafs('{}.custom.png'.format(plot), bafs, 'Chromosome {} from {:.0f}M to {:.0f}M'.format(chromosome, int(start) / 1000000, int(finish) / 1000000), int(start), int(finish), gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title, legend_location, markersize)
+          plot_bafs('{}.custom.png'.format(plot), bafs, 'Chromosome {} from {:.0f}M to {:.0f}M'.format(chromosome, int(start) / 1000000, int(finish) / 1000000), int(start), int(finish), gene_starts, gene_finishes, gene_names, False, width, height, no_legend, annotation_style, title, legend_location, markersize, dpi)
   elif plot_chromosomes:
     if sample is not None:
-      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {} for sample {}'.format(last_chrom, sample), None, None, [], [], [], False, width, height, no_legend, annotation_style, title, legend_location, markersize)
+      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {} for sample {}'.format(last_chrom, sample), None, None, [], [], [], False, width, height, no_legend, annotation_style, title, legend_location, markersize, dpi)
     else:
-      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), None, None, [], [], [], False, width, height, no_legend, annotation_style, title, legend_location, markersize)
+      plot_bafs('{}.{}.png'.format(plot, last_chrom), bafs, 'Chromosome {}'.format(last_chrom), None, None, [], [], [], False, width, height, no_legend, annotation_style, title, legend_location, markersize, dpi)
 
-def calculate_segments(min_len, min_prop, min_count, noheader, plot, regions, region_names, region_padding, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title, legend_location, max_loh_without_evidence, fontsize=8, markersize=5):
+def calculate_segments(min_len, min_prop, min_count, noheader, plot, regions, region_names, region_padding, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title, legend_location, max_loh_without_evidence, fontsize=8, markersize=5, dpi=300):
   matplotlib.rcParams.update({'font.size': fontsize})
   start = None # last potential end
   last = None # last potential end
@@ -218,7 +216,7 @@ def calculate_segments(min_len, min_prop, min_count, noheader, plot, regions, re
       last = None
 
       if plot is not None and last_chrom != chrom:
-        check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title, legend_location, markersize)
+        check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title, legend_location, markersize, dpi)
         bafs = {'x': [], 'y': [], 'g': [], 'c': [], 'calls': [], 'l': []}
 
     if not status.startswith('reject'): # potential loh region
@@ -241,7 +239,7 @@ def calculate_segments(min_len, min_prop, min_count, noheader, plot, regions, re
 
   write_merged(start, last, loh_status, stats, min_len, min_prop, min_count, bafs, max_loh_without_evidence)
   if plot is not None and chrom is not None:
-    check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title, legend_location, markersize)
+    check_plot(plot, last_chrom, chrom, regions, region_names, region_padding, bafs, plot_chromosomes, annotate, plot_custom, sample, width, height, no_legend, annotation_style, title, legend_location, markersize, dpi)
 
   logging.info('done: %s', ', '.join(['{}: {}'.format(k, stats[k]) for k in stats]))
 
@@ -269,6 +267,7 @@ if __name__ == '__main__':
   parser.add_argument('--fontsize', default=8, type=int, help='font size')
   parser.add_argument('--markersize', default=12, type=int, help='font size')
   parser.add_argument('--annotate', action='store_true', help='include variant locations on region plots')
+  parser.add_argument('--dpi', default=300, type=int, help='dpi')
   parser.add_argument('--annotation_style', choices=['float', 'flag'], default='float', required=False, help='how to annotate regions of interest')
   args = parser.parse_args()
   if args.verbose:
@@ -284,4 +283,4 @@ if __name__ == '__main__':
   if args.regions is not None and len(args.regions) != len(region_padding):
     logging.error('Region lengths do not match')
     sys.exit(1)
-  calculate_segments(args.min_len, args.min_prop, args.min_count, args.noheader, args.plot, args.regions, args.region_names, region_padding, args.plot_chromosomes, args.annotate, args.plot_custom, args.sample, args.width, args.height, args.nolegend, args.annotation_style, args.title, args.legend_location, args.max_loh_without_evidence, args.fontsize, args.markersize)
+  calculate_segments(args.min_len, args.min_prop, args.min_count, args.noheader, args.plot, args.regions, args.region_names, region_padding, args.plot_chromosomes, args.annotate, args.plot_custom, args.sample, args.width, args.height, args.nolegend, args.annotation_style, args.title, args.legend_location, args.max_loh_without_evidence, args.fontsize, args.markersize, args.dpi)
