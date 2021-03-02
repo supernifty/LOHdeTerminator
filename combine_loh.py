@@ -24,14 +24,15 @@ def main(lohs, transcripts, min_accept):
   logging.info('%i records processed', rows)
 
   written = set()
-  sys.stdout.write('sample\tgene\taccept\n')
+  sys.stdout.write('sample\tgene\taccept\tlength\taccept_per_mb\n')
   for loh in lohs:
     logging.info('processing %s', loh)
     sample = loh.split('/')[-1].split('.')[0]
     for line in open(loh, 'r'):
+      #chr     start   end     pctaccept accept support neutral length
       #12      6709614 6711147 50.0    1       0       1       1533
       fields = line.strip('\n').split('\t')
-      chrom, start, finish, accept = fields[0], int(fields[1]), int(fields[2]), int(fields[4])
+      chrom, start, finish, accept, length = fields[0], int(fields[1]), int(fields[2]), int(fields[4]), int(fields[7])
       if accept < min_accept:
         continue
       chrom = chrom.replace('chr', '')
@@ -39,7 +40,7 @@ def main(lohs, transcripts, min_accept):
         overlaps = chroms[chrom][start:finish]
         for overlap in overlaps:
           if (sample, overlap.data) not in written:
-            sys.stdout.write('{}\t{}\t{}\n'.format(sample, overlap.data, accept))
+            sys.stdout.write('{}\t{}\t{}\t{}\t{:.3f}\n'.format(sample, overlap.data, accept, length, accept / length * 1000000))
             written.add((sample, overlap.data))
       else:
         logging.warn('chrom %s in %s not found in %s', chrom, loh, transcripts)

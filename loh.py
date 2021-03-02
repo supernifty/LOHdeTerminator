@@ -20,6 +20,9 @@ FILTERED=''
 MIN_AF_HET_GL=0.3
 MAX_AF_HET_GL=0.7
 
+MIN_AF_HET_TUMOUR=0.3
+MAX_AF_HET_TUMOUR=0.7
+
 MIN_HET_HOM_DIFF=0.3 # het -> hom diff required (accept)
 MIN_HOM_REF_DIFF=0.6 # hom -> hom diff required (support)
 
@@ -52,11 +55,11 @@ def write(stats, variant, germline_af, tumour_af, germline_dp, tumour_dp, cat):
   sys.stdout.write('{}\t{}\t{:.2f}\t{:.2f}\t{}\t{}\t{}{}\n'.format(variant.CHROM, variant.POS, germline_af, tumour_af, germline_dp, tumour_dp, cat, pass_marker))
   stats[cat] += 1
 
-def main(tumour, germline, neutral_variants, filtered_variants, min_dp_germline, min_dp_tumour, min_af, tumour_cellularity):
+def main(tumour, germline, neutral_variants, filtered_variants, min_dp_germline, min_dp_tumour, min_af, tumour_cellularity, min_het_hom, min_hom_hom, min_af_het_tumour_threshold, max_af_het_tumour_threshold):
   # calculate tumour thresholds based on cellularity
-  min_af_het_tumour= 0.3 * tumour_cellularity
-  max_af_het_tumour= 0.7 * tumour_cellularity
-  logging.info('tumour cutoffs are %.2f to %.2f with cellularity %.2f', min_af_het_tumour, max_af_het_tumour, tumour_cellularity)
+  min_af_het_tumour= min_af_het_tumour_threshold * tumour_cellularity
+  max_af_het_tumour= max_af_het_tumour_threshold * tumour_cellularity
+  logging.info('tumour cutoffs are %.2f to %.2f with cellularity %.2f het diff %.2f hom diff %.2f min tumour het %.2f max tumour het %.2f', min_af_het_tumour, max_af_het_tumour, tumour_cellularity, min_het_hom, min_hom_hom, min_af_het_tumour_threshold, max_af_het_tumour_threshold)
 
   logging.info('reading vcf from stdin...')
   vcf_in = cyvcf2.VCF('-')
@@ -107,12 +110,12 @@ def main(tumour, germline, neutral_variants, filtered_variants, min_dp_germline,
     stats['af_t_max'] = max(stats['af_t_max'], tumour_af)
 
     # het -> hom
-    if MIN_AF_HET_GL < germline_af < MAX_AF_HET_GL and abs(germline_af - tumour_af / tumour_cellularity) > MIN_HET_HOM_DIFF:
+    if MIN_AF_HET_GL < germline_af < MAX_AF_HET_GL and abs(germline_af - tumour_af / tumour_cellularity) > min_het_hom:
       write(stats, variant, germline_af, tumour_af, germline_ad_ref + germline_ad_alt, tumour_ad_ref + tumour_ad_alt, 'accept')
       stats['accept'] += 1
 
     # hom -> ref or ref -> hom
-    elif abs(germline_af - tumour_af / tumour_cellularity) > MIN_HOM_REF_DIFF:
+    elif abs(germline_af - tumour_af / tumour_cellularity) > min_hom_hom:
       write(stats, variant, germline_af, tumour_af, germline_ad_ref + germline_ad_alt, tumour_ad_ref + tumour_ad_alt, 'support')
 
     # * -> het
@@ -136,6 +139,10 @@ if __name__ == '__main__':
   parser.add_argument('--min_dp_germline', type=int, default=1, help='min dp for germline')
   parser.add_argument('--min_dp_tumour', type=int, default=1, help='min dp for tumour')
   parser.add_argument('--min_af', type=float, default=0.0, help='min af for either germline or tumour')
+  parser.add_argument('--min_het_hom', type=float, default=MIN_HET_HOM_DIFF, help='change to be considered het to hom default 0.3')
+  parser.add_argument('--min_hom_hom', type=float, default=MIN_HOM_REF_DIFF, help='change to be considered hom to hom default 0.7')
+  parser.add_argument('--min_tumour_het', type=float, default=MIN_AF_HET_TUMOUR, help='min tumour af to be het')
+  parser.add_argument('--max_tumour_het', type=float, default=MAX_AF_HET_TUMOUR, help='max tumour af to be het')
   parser.add_argument('--verbose', action='store_true', help='more logging')
   args = parser.parse_args()
   if args.verbose:
@@ -143,4 +150,7 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.tumour, args.germline, args.neutral_variants, args.filtered_variants, args.min_dp_germline, args.min_dp_tumour, args.min_af, args.tumour_cellularity)
+  if args.tumour_cellularity > 1.0:
+    args.tumour_cellularity /= 100
+
+  main(args.tumour, args.germline, args.neutral_variants, args.filtered_variants, args.min_dp_germline, args.min_dp_tumour, args.min_af, args.tumour_cellularity, args.min_het_hom, args.min_hom_hom, args.min_tumour_het, args.max_tumour_het)
