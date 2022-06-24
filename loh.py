@@ -17,8 +17,8 @@ PASSED='+'
 FILTERED=''
 
 # het in the germline
-MIN_AF_HET_GL=0.3
-MAX_AF_HET_GL=0.7
+MIN_AF_HET_GERMLINE=0.3
+MAX_AF_HET_GERMLINE=0.7
 
 MIN_AF_HET_TUMOUR=0.3
 MAX_AF_HET_TUMOUR=0.7
@@ -55,7 +55,7 @@ def write(stats, variant, germline_af, tumour_af, germline_dp, tumour_dp, cat):
   sys.stdout.write('{}\t{}\t{:.2f}\t{:.2f}\t{}\t{}\t{}{}\n'.format(variant.CHROM, variant.POS, germline_af, tumour_af, germline_dp, tumour_dp, cat, pass_marker))
   stats[cat] += 1
 
-def main(vcf_in, tumour, germline, neutral_variants, filtered_variants, min_dp_germline, min_dp_tumour, min_af, tumour_cellularity, min_het_hom, min_hom_hom, min_af_het_tumour_threshold, max_af_het_tumour_threshold, germline_vcf):
+def main(vcf_in, tumour, germline, neutral_variants, filtered_variants, min_dp_germline, min_dp_tumour, min_af, tumour_cellularity, min_het_hom, min_hom_hom, min_af_het_tumour_threshold, max_af_het_tumour_threshold, germline_vcf, min_germline_het, max_germline_het):
   # calculate tumour thresholds based on cellularity
   min_af_het_tumour= min_af_het_tumour_threshold * tumour_cellularity
   max_af_het_tumour= max_af_het_tumour_threshold * tumour_cellularity
@@ -115,7 +115,7 @@ def main(vcf_in, tumour, germline, neutral_variants, filtered_variants, min_dp_g
     stats['af_t_max'] = max(stats['af_t_max'], tumour_af)
 
     # het -> hom
-    if MIN_AF_HET_GL < germline_af < MAX_AF_HET_GL and abs(germline_af - tumour_af / tumour_cellularity) > min_het_hom:
+    if min_germline_het < germline_af < max_germline_het and abs(germline_af - tumour_af / tumour_cellularity) > min_het_hom:
       write(stats, variant, germline_af, tumour_af, germline_ad_ref + germline_ad_alt, tumour_ad_ref + tumour_ad_alt, 'accept')
       stats['accept'] += 1
 
@@ -157,7 +157,7 @@ def main(vcf_in, tumour, germline, neutral_variants, filtered_variants, min_dp_g
       else:
         germline_af = germline_ad_alt / (germline_ad_ref + germline_ad_alt)
 
-      if MIN_AF_HET_GL < germline_af < MAX_AF_HET_GL:
+      if min_germline_het < germline_af < max_germline_het:
         write(stats, variant, germline_af, germline_af, germline_ad_ref + germline_ad_alt, -1, 'reject')
     logging.info('processing %s: done', germline_vcf)
  
@@ -211,6 +211,8 @@ if __name__ == '__main__':
   parser.add_argument('--min_hom_hom', type=float, default=MIN_HOM_REF_DIFF, help='change to be considered hom to hom default 0.7')
   parser.add_argument('--min_tumour_het', type=float, default=MIN_AF_HET_TUMOUR, help='min tumour af to be het')
   parser.add_argument('--max_tumour_het', type=float, default=MAX_AF_HET_TUMOUR, help='max tumour af to be het')
+  parser.add_argument('--min_germline_het', type=float, default=MIN_AF_HET_GERMLINE, help='min germline af to be het')
+  parser.add_argument('--max_germline_het', type=float, default=MAX_AF_HET_GERMLINE, help='max germline af to be het')
   parser.add_argument('--germline_vcf', required=False, help='additional germline vcf for germline only hets')
 
   # not yet supported
@@ -238,4 +240,4 @@ if __name__ == '__main__':
     logging.info('reading vcf from stdin...')
     vcf_in = cyvcf2.VCF('-')
 
-  main(vcf_in, args.tumour, args.germline, args.neutral_variants, args.filtered_variants, args.min_dp_germline, args.min_dp_tumour, args.min_af, args.tumour_cellularity, args.min_het_hom, args.min_hom_hom, args.min_tumour_het, args.max_tumour_het, args.germline_vcf)
+  main(vcf_in, args.tumour, args.germline, args.neutral_variants, args.filtered_variants, args.min_dp_germline, args.min_dp_tumour, args.min_af, args.tumour_cellularity, args.min_het_hom, args.min_hom_hom, args.min_tumour_het, args.max_tumour_het, args.germline_vcf, min_germline_het=args.min_germline_het, max_germline_het=args.max_germline_het)
