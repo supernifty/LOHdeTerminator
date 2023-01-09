@@ -40,7 +40,10 @@ CONNECT=(LOH_COLOR, SUPPORT_COLOR)
 
 def write_merged(start, last, loh_status, stats, min_len, min_prop, min_count, bafs, max_loh_without_evidence, min_accept):
   if loh_status['loh'] and loh_status['accepts'] >= min_accept:
-    new_last = min(last[1], loh_status['last_accept_or_support'][1] + max_loh_without_evidence)
+    if 'last_accept_or_support' not in loh_status:
+      new_last = last[1]
+    else:
+      new_last = min(last[1], loh_status['last_accept_or_support'][1] + max_loh_without_evidence)
     length = new_last - start[1]
     prop = loh_status['accepts'] / (loh_status['accepts'] + loh_status['supports'] + loh_status['neutrals'])
     if length > min_len and prop > min_prop and loh_status['accepts'] + loh_status['supports'] >= min_count:
@@ -302,7 +305,7 @@ if __name__ == '__main__':
   parser.add_argument('--sample', required=False, help='sample name to put in title')
   parser.add_argument('--title', required=False, help='title for plot')
   parser.add_argument('--plot', required=False, help='plot results with image prefix')
-  parser.add_argument('--plot_type', required=False, default='png', help='plot format png pdf')
+  parser.add_argument('--plot_type', required=False, default='png', help='plot format png pdf svg')
   parser.add_argument('--plot_chromosomes', action='store_true', help='plot results with image prefix')
   parser.add_argument('--width', default=24, type=int, help='width of image')
   parser.add_argument('--height', default=8, type=int, help='height of image')

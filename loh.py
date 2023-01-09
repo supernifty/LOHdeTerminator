@@ -6,7 +6,10 @@
 '''
 
 import argparse
+import collections
+import csv
 import cyvcf2
+import gzip
 import logging
 import math
 import sys
@@ -27,6 +30,10 @@ MIN_HET_HOM_DIFF=0.3 # het -> hom diff required (accept)
 MIN_HOM_REF_DIFF=0.6 # hom -> hom diff required (support)
 
 def calculate_af(variant, sample_id):
+  # mafs
+  if hasattr(variant, 'REF_COUNT') and hasattr(variant, 'ALT_COUNT'):
+    return variant.REF_COUNT, variant.ALT_COUNT
+
   try:
     ad_ref, ad_alt = variant.format("AD")[sample_id][:2]
   except KeyError:
@@ -64,7 +71,10 @@ def main(vcf_in, tumour, germline, neutral_variants, filtered_variants, min_dp_g
   skipped_pass = count = 0
   sys.stdout.write('chrom\tpos\tg_af\tt_af\tg_dp\tt_af\tstatus\n')
 
-  tumour_id = vcf_in.samples.index(tumour)
+  if tumour is not None: # none for mafs
+    tumour_id = vcf_in.samples.index(tumour)
+  else:
+    tumour_id = None
   if germline is not None:
     germline_id = vcf_in.samples.index(germline)
 
@@ -161,11 +171,25 @@ def main(vcf_in, tumour, germline, neutral_variants, filtered_variants, min_dp_g
         write(stats, variant, germline_af, germline_af, germline_ad_ref + germline_ad_alt, -1, 'reject')
     logging.info('processing %s: done', germline_vcf)
  
+def no_chr(chrom):
+  if chrom == 'MT':
+    return 'M'
+  # deals with chrUn_gl000220.1
+  return chrom.split('.')[0].split('_', maxsplit=1)[-1].replace('chr', '').upper()
 
-def maf_to_vcf(maf, sample, sample_col, chrom_col, pos_col, ref_col, alt_col, is_not_zipped):
+def get_value(header, col, row):
+  return row[header.index(col)]
+
+def open_file(fn, is_gzipped):
+  if is_gzipped:
+    return gzip.open(fn, 'rt')
+  else:
+    return open(fn, 'rt')
+
+def maf_to_vcf(maf, sample, sample_col, chrom_col, pos_col, ref_col, alt_col, is_not_zipped, germline_vcf):
 
   # TODO also needs filter, ad - not working yet
-  Variant = collections.namedtuple('Variant', 'CHROM POS REF ALT')
+  Variant = collections.namedtuple('Variant', 'CHROM POS REF ALT FILTER AF REF_COUNT ALT_COUNT')
 
   # enumeration a maf into a variant
   header = None
@@ -192,8 +216,14 @@ def maf_to_vcf(maf, sample, sample_col, chrom_col, pos_col, ref_col, alt_col, is
       pos += 1 # fix for TCGA mafs
     ref = ref.replace('-', '')
     alt = get_value(header, alt_col, row).replace('-', '')
+    filtr = get_value(header, 'FILTER', row)
+    if filtr == 'PASS':
+      filtr = None
+    ref_count = float(get_value(header, 't_ref_count', row))
+    alt_count = float(get_value(header, 't_alt_count', row))
+    af = alt_count / (ref_count + alt_count)
 
-    yield Variant(chrom, pos, ref, (alt,))
+    yield Variant(chrom, pos, ref, (alt,), filtr, af, ref_count, alt_count)
 
 
 if __name__ == '__main__':
@@ -215,7 +245,7 @@ if __name__ == '__main__':
   parser.add_argument('--max_germline_het', type=float, default=MAX_AF_HET_GERMLINE, help='max germline af to be het')
   parser.add_argument('--germline_vcf', required=False, help='additional germline vcf for germline only hets')
 
-  # not yet supported
+  parser.add_argument('--maf_filename', required=False, help='vcf is actually a maf with this filename')
   parser.add_argument('--maf_sample', required=False, help='vcf is actually a maf with this sample of interest')
   parser.add_argument('--maf_sample_column', required=False, default='Tumor_Sample_Barcode', help='maf chrom column name')
   parser.add_argument('--maf_chrom_column', required=False, default='Chromosome', help='maf chrom column name')
@@ -235,7 +265,8 @@ if __name__ == '__main__':
     args.tumour_cellularity /= 100
 
   if args.maf_sample:
-    vcf_in = maf_to_vcf(v, args.maf_sample, args.maf_sample_column, args.maf_chrom_column, args.maf_pos_column, args.maf_ref_column, args.maf_alt_column, args.vcf_not_zipped, args.germline_vcf)
+    vcf_in = maf_to_vcf(args.maf_filename, args.maf_sample, args.maf_sample_column, args.maf_chrom_column, args.maf_pos_column, args.maf_ref_column, args.maf_alt_column, args.vcf_not_zipped, args.germline_vcf)
+    args.tumour = None
   else:
     logging.info('reading vcf from stdin...')
     vcf_in = cyvcf2.VCF('-')
