@@ -188,7 +188,6 @@ def open_file(fn, is_gzipped):
 
 def maf_to_vcf(maf, sample, sample_col, chrom_col, pos_col, ref_col, alt_col, is_not_zipped, germline_vcf):
 
-  # TODO also needs filter, ad - not working yet
   Variant = collections.namedtuple('Variant', 'CHROM POS REF ALT FILTER AF REF_COUNT ALT_COUNT')
 
   # enumeration a maf into a variant

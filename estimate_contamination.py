@@ -4,6 +4,9 @@
 '''
 
 import argparse
+import csv
+import collections
+import gzip
 import logging
 import sys
 
@@ -19,7 +22,10 @@ def estimate_percentile(values):
   '''
     ultra simple approach of just taking the 99th percentile
   '''
-  return {'tumour': np.percentile(np.array([v for v in values if v > 0.1]), 99)}
+  distribution = [v for v in values if v > 0.1]
+  if len(distribution) == 0:
+    return {'tumour': 1.0}
+  return {'tumour': np.percentile(np.array(distribution), 99)}
 
 def generate_estimate(params):
   # now make our estimate based on our distributions
@@ -75,11 +81,10 @@ ESTIMATE = {
   'model': estimate_model
 }
 
-def read_vcf(fn, pass_only, dp_threshold, info_af):
+def read_vcf(vcf_in, pass_only, dp_threshold, info_af):
   logging.info('reading vcf from stdin...')
   skipped_dp = skipped_pass = 0
 
-  vcf_in = cyvcf2.VCF(fn)
   values = []
 
   for variant_count, variant in enumerate(vcf_in):
@@ -92,11 +97,18 @@ def read_vcf(fn, pass_only, dp_threshold, info_af):
       skipped_pass += 1
       continue
 
-    if variant.INFO["DP"] < dp_threshold: # somatic + germline
+    if hasattr(variant, "DP"):
+      depth = variant.DP
+    else:
+      depth = variant.INFO["DP"]
+
+    if depth < dp_threshold: # somatic + germline
       skipped_dp += 1
       continue
 
-    if info_af:
+    if hasattr(variant, "AF"):
+      value = variant.AF
+    elif info_af:
       value = variant.INFO["AF"]
     else:
       ad = variant.format("AD")[sample_id]
@@ -116,15 +128,16 @@ def estimate(method, values, pass_only, dp_threshold, info_af):
   logging.info('done')
   return est
 
-def main(pass_only, dp_threshold, info_af, plot, trials):
-  values = read_vcf('-', pass_only, dp_threshold, info_af)
+def main(vcf_in, pass_only, dp_threshold, info_af, plot, trials, prefix='Estimated tumour percentage (percentile):'):
+  values = read_vcf(vcf_in, pass_only, dp_threshold, info_af)
   result = estimate('percentile', values, pass_only, dp_threshold, info_af)
-  sys.stdout.write('Estimated tumour percentage (percentile):\t{:.2f}\n'.format(result['tumour']))
-  results = []
-  for _ in range(trials):
-    result = estimate('model', values, pass_only, dp_threshold, info_af)
-    results.append(result)
-  sys.stdout.write('Estimated tumour percentage (model):\t{}\n'.format(' '.join(['{:.2f}'.format(result['tumour']) for result in results])))
+  sys.stdout.write('{}\t{:.2f}\n'.format(prefix, result['tumour']))
+  if trials > 0:
+    results = []
+    for _ in range(trials):
+      result = estimate('model', values, pass_only, dp_threshold, info_af)
+      results.append(result)
+    sys.stdout.write('Estimated tumour percentage (model):\t{}\n'.format(' '.join(['{:.2f}'.format(result['tumour']) for result in results])))
 
   if plot:
     # draw histogram of normalised values and fitted distribution
@@ -140,6 +153,60 @@ def main(pass_only, dp_threshold, info_af, plot, trials):
     plt.tight_layout()
     plt.savefig(plot)
 
+def open_file(fn, is_gzipped):
+  if is_gzipped:
+    return gzip.open(fn, 'rt')
+  else:
+    return open(fn, 'rt')
+
+def no_chr(chrom):
+  if chrom == 'MT':
+    return 'M'
+  # deals with chrUn_gl000220.1
+  return chrom.split('.')[0].split('_', maxsplit=1)[-1].replace('chr', '').upper()
+
+def get_value(header, col, row):
+  return row[header.index(col)]
+
+def maf_to_vcf(maf, sample, sample_col, chrom_col, pos_col, ref_col, alt_col, is_not_zipped):
+
+  Variant = collections.namedtuple('Variant', 'CHROM POS REF ALT FILTER AF REF_COUNT ALT_COUNT DP')
+
+  # enumeration a maf into a variant
+  header = None
+  for line, row in enumerate(csv.reader(open_file(maf, not is_not_zipped), delimiter='\t')):
+    if line % 1000 == 0:
+      logging.debug('processed %i lines of %s...', line, maf)
+
+    if row[0].startswith('#'):
+      continue
+    if header is None:
+      header = row
+      continue
+
+    #Hugo_Symbol     Entrez_Gene_Id  Center  NCBI_Build      Chromosome      Start_Position  End_Position    Strand  Variant_Classification  Variant_Type    Reference_Allele        Tumor_Seq_Allele1       Tumor_Seq_Allele2       dbSNP_RS        dbSNP_Val_Status        Tumor_Sample_Barcode    Matched_Norm_Sample_Barcode     Match_Norm_Seq_Allele1  Match_Norm_Seq_Allele2  Tumor_Validation_Allele1        Tumor_Validation_Allele2        Match_Norm_Validation_Allele1   Match_Norm_Validation_Allele2   Verification_Status     Validation_Status       Mutation_Status Sequencing_Phase        Sequence_Source Validation_Method       Score   BAM_File        Sequencer       Tumor_Sample_UUID       Matched_Norm_Sample_UUID        HGVSc   HGVSp   HGVSp_Short     Transcript_ID   Exon_Number     t_depth t_ref_count     t_alt_count     n_depth n_ref_count     n_alt_count     all_effects     Allele  Gene    Feature Feature_type    One_Consequence Consequence     cDNA_position   CDS_position    Protein_position        Amino_acids Codons  Existing_variation      ALLELE_NUM      DISTANCE        TRANSCRIPT_STRAND       SYMBOL  SYMBOL_SOURCE   HGNC_ID BIOTYPE CANONICAL       CCDS    ENSP    SWISSPROT       TREMBL  UNIPARC RefSeq  SIFT    PolyPhen        EXON    INTRON  DOMAINS GMAF    AFR_MAF AMR_MAF ASN_MAF EAS_MAF EUR_MAF SAS_MAF AA_MAF  EA_MAF  CLIN_SIG        SOMATIC PUBMED  MOTIF_NAME      MOTIF_POS       HIGH_INF_POS    MOTIF_SCORE_CHANGE      IMPACT  PICK    VARIANT_CLASS   TSL     HGVS_OFFSET     PHENO   MINIMISED       ExAC_AF ExAC_AF_Adj     ExAC_AF_AFR     ExAC_AF_AMR     ExAC_AF_EAS     ExAC_AF_FIN     ExAC_AF_NFE     ExAC_AF_OTH     ExAC_AF_SAS     GENE_PHENO      FILTER  CONTEXT src_vcf_id      tumor_bam_uuid  normal_bam_uuid case_id GDC_FILTER      COSMIC  MC3_Overlap     GDC_Validation_Status
+
+    row_sample = get_value(header, sample_col, row)
+    if sample is not None and row_sample != sample:
+      continue
+
+    chrom = no_chr(get_value(header, chrom_col, row))
+    pos = int(get_value(header, pos_col, row))
+    ref = get_value(header, ref_col, row)
+    if ref == '-':
+      pos += 1 # fix for TCGA mafs
+    ref = ref.replace('-', '')
+    alt = get_value(header, alt_col, row).replace('-', '')
+    filtr = get_value(header, 'FILTER', row)
+    if filtr == 'PASS':
+      filtr = None
+    ref_count = float(get_value(header, 't_ref_count', row))
+    alt_count = float(get_value(header, 't_alt_count', row))
+    dp = ref_count + alt_count
+    af = alt_count / dp
+
+    yield Variant(chrom, pos, ref, (alt,), filtr, af, ref_count, alt_count, dp)
+
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='estimate tumour %')
   parser.add_argument('--dp_threshold', required=False, default=50, help='use af in info field')
@@ -147,6 +214,17 @@ if __name__ == '__main__':
   parser.add_argument('--info_af', action='store_true', help='use af in info field')
   parser.add_argument('--trials', required=False, type=int, default=1, help='how many runs of model')
   parser.add_argument('--plot', required=False, help='use af in info field')
+  parser.add_argument('--prefix', required=False, help='name')
+
+  parser.add_argument('--maf_filename', required=False, help='vcf is actually a maf with this filename')
+  parser.add_argument('--maf_sample', required=False, help='vcf is actually a maf with this sample of interest')
+  parser.add_argument('--maf_sample_column', required=False, default='Tumor_Sample_Barcode', help='maf chrom column name')
+  parser.add_argument('--maf_chrom_column', required=False, default='Chromosome', help='maf chrom column name')
+  parser.add_argument('--maf_pos_column', required=False, default='Start_Position', help='maf pos column name')
+  parser.add_argument('--maf_ref_column', required=False, default='Reference_Allele', help='maf ref column name')
+  parser.add_argument('--maf_alt_column', required=False, default='Tumor_Seq_Allele2', help='maf alt column name')
+  parser.add_argument('--vcf_not_zipped', action='store_true', help='do not try to unzip (only matters for maf)')
+
   parser.add_argument('--verbose', action='store_true', help='more logging')
   args = parser.parse_args()
   if args.verbose:
@@ -154,4 +232,11 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.pass_only, args.dp_threshold, args.info_af, args.plot, args.trials)
+  if args.maf_sample is not None:
+    logging.info('opening maf file %s with sample %s...', args.maf_filename, args.maf_sample)
+    vcf_in = maf_to_vcf(args.maf_filename, args.maf_sample, args.maf_sample_column, args.maf_chrom_column, args.maf_pos_column, args.maf_ref_column, args.maf_alt_column, args.vcf_not_zipped)
+  else:
+    logging.info('opening vcf from stdin...')
+    vcf_in = cyvcf2.VCF('-')
+
+  main(vcf_in, args.pass_only, args.dp_threshold, args.info_af, args.plot, args.trials, args.prefix)
