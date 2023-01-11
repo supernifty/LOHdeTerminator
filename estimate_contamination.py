@@ -203,6 +203,8 @@ def maf_to_vcf(maf, sample, sample_col, chrom_col, pos_col, ref_col, alt_col, is
     ref_count = float(get_value(header, 't_ref_count', row))
     alt_count = float(get_value(header, 't_alt_count', row))
     dp = ref_count + alt_count
+    if dp == 0:
+      continue
     af = alt_count / dp
 
     yield Variant(chrom, pos, ref, (alt,), filtr, af, ref_count, alt_count, dp)

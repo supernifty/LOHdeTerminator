@@ -62,14 +62,14 @@ def write(stats, variant, germline_af, tumour_af, germline_dp, tumour_dp, cat):
   sys.stdout.write('{}\t{}\t{:.2f}\t{:.2f}\t{}\t{}\t{}{}\n'.format(variant.CHROM, variant.POS, germline_af, tumour_af, germline_dp, tumour_dp, cat, pass_marker))
   stats[cat] += 1
 
-def main(vcf_in, tumour, germline, neutral_variants, filtered_variants, min_dp_germline, min_dp_tumour, min_af, tumour_cellularity, min_het_hom, min_hom_hom, min_af_het_tumour_threshold, max_af_het_tumour_threshold, germline_vcf, min_germline_het, max_germline_het):
+def main(vcf_in, tumour, germline, neutral_variants, filtered_variants, min_dp_germline, min_dp_tumour, min_af, tumour_cellularity, min_het_hom, min_hom_hom, min_af_het_tumour_threshold, max_af_het_tumour_threshold, germline_vcf, min_germline_het, max_germline_het, skip_hom_ref):
   # calculate tumour thresholds based on cellularity
   min_af_het_tumour= min_af_het_tumour_threshold * tumour_cellularity
   max_af_het_tumour= max_af_het_tumour_threshold * tumour_cellularity
   logging.info('tumour cutoffs are %.2f to %.2f with cellularity %.2f het diff %.2f hom diff %.2f min tumour het %.2f max tumour het %.2f', min_af_het_tumour, max_af_het_tumour, tumour_cellularity, min_het_hom, min_hom_hom, min_af_het_tumour_threshold, max_af_het_tumour_threshold)
 
   skipped_pass = count = 0
-  sys.stdout.write('chrom\tpos\tg_af\tt_af\tg_dp\tt_af\tstatus\n')
+  sys.stdout.write('chrom\tpos\tg_af\tt_af\tg_dp\tt_dp\tstatus\n')
 
   if tumour is not None: # none for mafs
     tumour_id = vcf_in.samples.index(tumour)
@@ -78,7 +78,7 @@ def main(vcf_in, tumour, germline, neutral_variants, filtered_variants, min_dp_g
   if germline is not None:
     germline_id = vcf_in.samples.index(germline)
 
-  stats = {'af_g_min': 1.0, 'af_g_max': 0.0, 'af_t_min': 1.0, 'af_t_max': 0.0, 'accept': 0, 'support': 0, 'reject': 0, 'accept': 0, 'neutral': 0, 'min_dp': 0, 'min_af': 0}
+  stats = {'af_g_min': 1.0, 'af_g_max': 0.0, 'af_t_min': 1.0, 'af_t_max': 0.0, 'accept': 0, 'support': 0, 'reject': 0, 'accept': 0, 'neutral': 0, 'min_dp': 0, 'min_af': 0, 'hom_ref': 0}
 
   seen = set()
   for count, variant in enumerate(vcf_in):
@@ -119,6 +119,11 @@ def main(vcf_in, tumour, germline, neutral_variants, filtered_variants, min_dp_g
 
     if germline_af < min_af and tumour_af < min_af:
       stats['min_af'] += 1
+      continue
+
+    # looks like loh but it's a hom ref, which we ignore
+    if skip_hom_ref and tumour_af / tumour_cellularity < germline_af and abs(germline_af - tumour_af / tumour_cellularity) > min_het_hom:
+      stats['hom_ref'] += 1
       continue
 
     stats['af_t_min'] = min(stats['af_t_min'], tumour_af)
@@ -243,6 +248,7 @@ if __name__ == '__main__':
   parser.add_argument('--min_germline_het', type=float, default=MIN_AF_HET_GERMLINE, help='min germline af to be het')
   parser.add_argument('--max_germline_het', type=float, default=MAX_AF_HET_GERMLINE, help='max germline af to be het')
   parser.add_argument('--germline_vcf', required=False, help='additional germline vcf for germline only hets')
+  parser.add_argument('--skip_hom_ref', action='store_true', help='do not consider het->ref to be evidence for loh')
 
   parser.add_argument('--maf_filename', required=False, help='vcf is actually a maf with this filename')
   parser.add_argument('--maf_sample', required=False, help='vcf is actually a maf with this sample of interest')
@@ -270,4 +276,4 @@ if __name__ == '__main__':
     logging.info('reading vcf from stdin...')
     vcf_in = cyvcf2.VCF('-')
 
-  main(vcf_in, args.tumour, args.germline, args.neutral_variants, args.filtered_variants, args.min_dp_germline, args.min_dp_tumour, args.min_af, args.tumour_cellularity, args.min_het_hom, args.min_hom_hom, args.min_tumour_het, args.max_tumour_het, args.germline_vcf, min_germline_het=args.min_germline_het, max_germline_het=args.max_germline_het)
+  main(vcf_in, args.tumour, args.germline, args.neutral_variants, args.filtered_variants, args.min_dp_germline, args.min_dp_tumour, args.min_af, args.tumour_cellularity, args.min_het_hom, args.min_hom_hom, args.min_tumour_het, args.max_tumour_het, args.germline_vcf, min_germline_het=args.min_germline_het, max_germline_het=args.max_germline_het, skip_hom_ref=args.skip_hom_ref)
