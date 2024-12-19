@@ -17,7 +17,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 matplotlib.rcParams.update({'font.size': 18})
 
-import version
+#import version
+PROGRAM_VERSION="0.1"
 
 #LOH_COLOR='#00852b'
 #GL_COLOR='#303030'
@@ -288,7 +289,7 @@ def calculate_segments(min_len, min_prop, min_count, noheader, plot, regions, re
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='LOH caller')
-  parser.add_argument('--version', action='version', version=version.PROGRAM_VERSION)
+  parser.add_argument('--version', action='version', version=PROGRAM_VERSION)
   parser.add_argument('--verbose', action='store_true', help='more logging')
   parser.add_argument('--min_len', default=1000, type=int, help='minimum segment size')
   parser.add_argument('--min_prop', type=float, default=0.1,  help='minimum accept proportion')

@@ -182,8 +182,11 @@ def no_chr(chrom):
   # deals with chrUn_gl000220.1
   return chrom.split('.')[0].split('_', maxsplit=1)[-1].replace('chr', '').upper()
 
-def get_value(header, col, row):
-  return row[header.index(col)]
+def get_value(header, col, row, default_value=None, mapped={}):
+  if col in header:
+    return mapped.get(row[header.index(col)], row[header.index(col)]) 
+  else:
+    return None
 
 def open_file(fn, is_gzipped):
   if is_gzipped:
@@ -220,12 +223,15 @@ def maf_to_vcf(maf, sample, sample_col, chrom_col, pos_col, ref_col, alt_col, is
       pos += 1 # fix for TCGA mafs
     ref = ref.replace('-', '')
     alt = get_value(header, alt_col, row).replace('-', '')
-    filtr = get_value(header, 'FILTER', row)
+    filtr = get_value(header, 'FILTER', row, 'PASS')
     if filtr == 'PASS':
       filtr = None
-    ref_count = float(get_value(header, 't_ref_count', row))
-    alt_count = float(get_value(header, 't_alt_count', row))
-    af = alt_count / (ref_count + alt_count)
+    ref_count = float(get_value(header, 't_ref_count', row, 0, {'NA': 0}))
+    alt_count = float(get_value(header, 't_alt_count', row, 0, {'NA': 0}))
+    if ref_count > 0 or alt_count > 0:
+      af = alt_count / (ref_count + alt_count)
+    else:
+      af = 0
 
     yield Variant(chrom, pos, ref, (alt,), filtr, af, ref_count, alt_count)
 
@@ -233,7 +239,7 @@ def maf_to_vcf(maf, sample, sample_col, chrom_col, pos_col, ref_col, alt_col, is
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='LOH caller')
   parser.add_argument('--version', action='version', version=version.PROGRAM_VERSION)
-  parser.add_argument('--tumour', required=True, help='tumour sample name')
+  parser.add_argument('--tumour', required=False, help='tumour sample name')
   parser.add_argument('--tumour_cellularity', required=False, type=float, default=1.0, help='tumour cellularity')
   parser.add_argument('--germline', required=False, help='germline sample name')
   parser.add_argument('--neutral_variants', action="store_true", help='include neutral variants')

@@ -128,16 +128,18 @@ def estimate(method, values, pass_only, dp_threshold, info_af):
   logging.info('done')
   return est
 
-def main(vcf_in, pass_only, dp_threshold, info_af, plot, trials, prefix='Estimated tumour percentage (percentile):'):
+def main(vcf_in, pass_only, dp_threshold, info_af, plot, trials, prefix='Estimated tumour percentage (percentile):', outfh=None):
   values = read_vcf(vcf_in, pass_only, dp_threshold, info_af)
   result = estimate('percentile', values, pass_only, dp_threshold, info_af)
-  sys.stdout.write('{}\t{:.2f}\n'.format(prefix, result['tumour']))
+  if outfh is not None:
+    outfh.write('{}\t{:.2f}\n'.format(prefix, result['tumour']))
   if trials > 0:
     results = []
     for _ in range(trials):
       result = estimate('model', values, pass_only, dp_threshold, info_af)
       results.append(result)
-    sys.stdout.write('Estimated tumour percentage (model):\t{}\n'.format(' '.join(['{:.2f}'.format(result['tumour']) for result in results])))
+    if outfh is not None:
+      outfh.write('Estimated tumour percentage (model):\t{}\n'.format(' '.join(['{:.2f}'.format(result['tumour']) for result in results])))
 
   if plot:
     # draw histogram of normalised values and fitted distribution
@@ -152,6 +154,7 @@ def main(vcf_in, pass_only, dp_threshold, info_af, plot, trials, prefix='Estimat
       ax.plot(l, results[0]['distribution'], label='Predicted')
     plt.tight_layout()
     plt.savefig(plot)
+  return result
 
 def open_file(fn, is_gzipped):
   if is_gzipped:
@@ -241,4 +244,4 @@ if __name__ == '__main__':
     logging.info('opening vcf from stdin...')
     vcf_in = cyvcf2.VCF('-')
 
-  main(vcf_in, args.pass_only, args.dp_threshold, args.info_af, args.plot, args.trials, args.prefix)
+  main(vcf_in, args.pass_only, args.dp_threshold, args.info_af, args.plot, args.trials, args.prefix, sys.stdout)
